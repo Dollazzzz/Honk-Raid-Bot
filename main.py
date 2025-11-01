@@ -207,18 +207,24 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Only admins can use this command!")
         return
     
+    # Get job queue from application
     job_queue = context.application.job_queue
-    if job_queue is None:
-        await update.message.reply_text("Job queue not available. Please restart the bot.")
-        return
     
+    # Remove existing jobs
     current_jobs = job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
     
+    # Schedule new job
     est_time = time(hour=20, minute=0, tzinfo=EST)
-    job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report")
-    await update.message.reply_text("Daily report scheduled for 8PM EST! The leaderboard will be posted automatically every day.")
+    job_queue.run_daily(
+        send_daily_report,
+        time=est_time,
+        name="daily_raid_report",
+        chat_id=TARGET_GROUP_ID
+    )
+    
+    await update.message.reply_text("✅ Daily report scheduled for 8:00 PM EST! The leaderboard will be posted automatically every day.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -258,7 +264,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     keep_alive()
     load_raid_data()
+    
     application = Application.builder().token(BOT_TOKEN).build()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
     application.add_handler(CommandHandler("addraid", add_raid_for_user))
@@ -268,8 +276,11 @@ def main():
     application.add_handler(CommandHandler("setupreport", setup_daily_report))
     application.add_handler(CommandHandler("resettoday", reset_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_x_link))
+    
     logger.info("Raid Tracking Bot starting...")
     logger.info(f"Monitoring group: {TARGET_GROUP_ID}")
+    
+    # Run with job queue enabled
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
