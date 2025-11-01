@@ -3,7 +3,8 @@ from threading import Thread
 import os
 import logging
 import re
-from datetime import datetime, time, timedelta
+import json 
+from datetime import datetime, time, timedelta 
 import pytz
 from collections import defaultdict
 from telegram import Update
@@ -51,6 +52,34 @@ def get_ordinal_suffix(day):
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return f"{day}{suffix}"
 
+def save_raid_data():
+    try:
+        data_to_save = {}
+        for date, users in raid_data.items():
+            date_str = date.isoformat()
+            data_to_save[date_str] = dict(users)
+        with open("raid_data.json", "w") as f:
+            json.dump(data_to_save, f)
+        logger.info("Raid data saved successfully")
+    except Exception as e:
+        logger.error(f"Error saving raid data: {e}")
+
+def load_raid_data():
+    try:
+        if os.path.exists("raid_data.json"):
+            with open("raid_data.json", "r") as f:
+                data = json.load(f)
+            for date_str, users in data.items():
+                date = datetime.fromisoformat(date_str).date()
+                for user_id_str, user_data in users.items():
+                    user_id = int(user_id_str)
+                    raid_data[date][user_id] = user_data
+            logger.info("Raid data loaded successfully")
+        else:
+            logger.info("No existing raid data found")
+    except Exception as e:
+        logger.error(f"Error loading raid data: {e}")
+
 def extract_x_link(text):
     if not text:
         return None
@@ -79,6 +108,7 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raid_data[today][user.id]["username"] = username
         raid_data[today][user.id]["count"] += 1
         logger.info(f"Raid tracked for @{username}. Total today: {raid_data[today][user.id]['count']}")
+        save_raid_data() 
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -87,13 +117,16 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["username"] = username
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
+    save_raid_data() 
 
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
+        save_raid_data()
         return
     if not context.args:
         await update.message.reply_text("Usage: /addraid @username")
+        save_raid_data() 
         return
     target_username = context.args[0].replace("@", "")
     today = get_today_date()
@@ -126,6 +159,7 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data["count"] -= 1
                 found = True
                 await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
+                save_raid_data() 
                 break
     if not found:
         await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
@@ -218,6 +252,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 def main():
     keep_alive()
+    load_raid_data()
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
