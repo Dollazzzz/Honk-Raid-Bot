@@ -26,13 +26,21 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 raid_data = defaultdict(lambda: defaultdict(lambda: {"username": "", "count": 0}))
-pending_raids = {}
 
 EST = pytz.timezone("America/New_York")
 UTC = pytz.timezone("UTC")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_GROUP_ID = int(os.environ.get("GROUP_ID", "-1002374333782"))
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    user = update.message.from_user
+    chat = update.message.chat
+    try:
+        member = await context.bot.get_chat_member(chat.id, user.id)
+        return member.status in ["creator", "administrator"]
+    except:
+        return False
+
 def get_today_date():
     return datetime.now(EST).date()
 
@@ -42,33 +50,20 @@ def get_ordinal_suffix(day):
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return f"{day}{suffix}"
+
 def extract_x_link(text):
     if not text:
         return None
     patterns = [
-        r'https?://(?:www\.)?x\.com/\S+?/status/(\d+)',
-        r'https?://(?:www\.)?twitter\.com/\S+?/status/(\d+)'
+        r'https?://(?:www\.)?x\.com/\S+/status/\d+',
+        r'https?://(?:www\.)?twitter\.com/\S+/status/\d+'
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
-            try:
-                status_id = match.group(1)
-                return status_id
-            except IndexError:
-                continue
+            return match.group(0)
     return None
-        
 
-def clean_old_pending_raids():
-    now = datetime.now(EST)
-    expired_links = []
-    for link, data in pending_raids.items():
-        if now - data["timestamp"] > timedelta(hours=2):
-            expired_links.append(link)
-    for link in expired_links:
-        del pending_raids[link]
-        logger.info(f"Cleaned up expired pending raid: {link}")
 async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -76,39 +71,14 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = message.from_user
     text = message.text or ""
     if user.is_bot:
-        if "raiderbot" in (user.username or "").lower():
-            await check_raid_completion(update, context)
         return
     x_link = extract_x_link(text)
     if x_link:
         username = user.username or user.first_name or f"User{user.id}"
-        pending_raids[x_link] = {"user_id": user.id, "username": username, "timestamp": datetime.now(EST)}
-        logger.info(f"Pending raid tracked: {username} posted {x_link}")
-        clean_old_pending_raids()
-
-async def check_raid_completion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    message = update.message
-    text = message.text or ""
-    if "Raid Ended" not in text and "Targets Reached" not in text:
-        return
-        x_link = extract_x_link(text)
-    if not x_link:
-        logger.warning("Raid completion detected but no link found")
-        return
-    if x_link in pending_raids:
-        raid_info = pending_raids[x_link]
-        user_id = raid_info["user_id"]
-        username = raid_info["username"]
         today = get_today_date()
-        raid_data[today][user_id]["username"] = username
-        raid_data[today][user_id]["count"] += 1
-        logger.info(f"Raid completed! Credit to @{username}. Total: {raid_data[today][user_id]['count']}")
-        del pending_raids[x_link]
-        await message.reply_text(f"Raid completed! Credit to @{username}\nTotal raids today: {raid_data[today][user_id]['count']}")
-    else:
-        logger.warning(f"Raid completed but no match for {x_link}")
+        raid_data[today][user.id]["username"] = username
+        raid_data[today][user.id]["count"] += 1
+        logger.info(f"Raid tracked for @{username}. Total today: {raid_data[today][user.id]['count']}")
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -117,6 +87,52 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["username"] = username
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
+
+async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ Only admins can use this command!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Usage: /addraid @username")
+        return
+         
+    target_username = context.args[0].replace("@", "")
+    today = get_today_date()
+    
+    found = False
+    for user_id, data in raid_data[today].items():
+        if data["username"] == target_username:
+            data["count"] += 1
+            found = True
+            await update.message.reply_text(f"Added 1 raid for @{target_username}. New total: {data['count']}")
+            return
+    
+    if not found:
+        await update.message.reply_text(f"User @{target_username} hasn't posted any raids today yet. They need to post at least one X link first, then you can add more.")
+
+async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("Only admins can use this command!")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /removeraid @username")
+        return
+    target_username = context.args[0].replace("@", "")
+    today = get_today_date()
+    found = False
+    for user_id, data in raid_data[today].items():
+        if data["username"] == target_username:
+            if data["count"] > 0:
+                data["count"] -= 1
+                found = True
+                await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
+                break
+    if not found:
+        await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
+    
+  
+
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = get_today_date()
     message_text = generate_leaderboard_message(today)
@@ -147,7 +163,6 @@ def generate_leaderboard_message(date):
         message += f"{display_name} {count} {raids_text} {medal}\n\n"
     message += f"Total Raids: {total_raids}"
     return message
-
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     today = get_today_date()
     message_text = generate_leaderboard_message(today)
@@ -155,34 +170,30 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
         logger.info(f"Daily report sent for {today}")
     except Exception as e:
-     logger.error(f"Error sending daily report: {e}")
+        logger.error(f"Error sending daily report: {e}")
 
 async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ Only admins can use this command!")
+        return
+    
     current_jobs = context.job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
     est_time = time(hour=20, minute=0, tzinfo=EST)
     context.job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report")
-    await update.message.reply_text("Daily report scheduled for 8PM EST!\nTracking X links posted by users.")  
-async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    clean_old_pending_raids()
-    if not pending_raids:
-        await update.message.reply_text("No pending raids!")
-        return
-    message_text = "Pending Raids:\n\n"
-    for link, data in pending_raids.items():
-        username = data["username"]
-        message_text += f"@{username}: {link}\n"
-    await update.message.reply_text(message_text)
+    await update.message.reply_text("Daily report scheduled for 8PM EST!\nTracking X links posted by users.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("⛔ Only admins can use this command!")
+        return
+    
     today = get_today_date()
     count = len(raid_data[today]) if today in raid_data else 0
     if today in raid_data:
         raid_data[today].clear()
-    pending_raids.clear()
-    await update.message.reply_text(f"Today data reset!\n{count} users cleared")
-
+    await update.message.reply_text(f"Today data reset! {count} users cleared")
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     today = get_today_date()
@@ -195,15 +206,26 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You have not completed any raids today yet!")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Raid Tracking Bot Active!\n\nCommands:\n/trackraid - Log a raid\n/stats - View leaderboard\n/mystats - Your stats\n/pending - Pending raids\n/setupreport - Daily 8PM reports\n/resettoday - Reset data")
+    await update.message.reply_text(
+        "Raid Tracking Bot Active!\n\n"
+        "Commands:\n"
+        "/trackraid - Log a raid for yourself\n"
+        "/addraid @user - Add a raid for someone (admin)\n"
+        "/removeraid @user - Remove a raid from someone (admin)\n"
+        "/stats - View leaderboard\n"
+        "/mystats - Your stats\n"
+        "/setupreport - Daily 8PM reports (admin)\n"
+        "/resettoday - Reset data (admin)"
+    )
 def main():
     keep_alive()
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
+    application.add_handler(CommandHandler("addraid", add_raid_for_user))
+    application.add_handler(CommandHandler("removeraid", remove_raid))
     application.add_handler(CommandHandler("stats", leaderboard_command))
     application.add_handler(CommandHandler("mystats", stats_command))
-    application.add_handler(CommandHandler("pending", pending_command))
     application.add_handler(CommandHandler("setupreport", setup_daily_report))
     application.add_handler(CommandHandler("resettoday", reset_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_x_link))
