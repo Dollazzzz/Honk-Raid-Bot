@@ -90,16 +90,13 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
-        await update.message.reply_text("⛔ Only admins can use this command!")
+        await update.message.reply_text("Only admins can use this command!")
         return
-    
     if not context.args:
         await update.message.reply_text("Usage: /addraid @username")
         return
-         
     target_username = context.args[0].replace("@", "")
     today = get_today_date()
-    
     found = False
     for user_id, data in raid_data[today].items():
         if data["username"] == target_username:
@@ -107,9 +104,11 @@ async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             found = True
             await update.message.reply_text(f"Added 1 raid for @{target_username}. New total: {data['count']}")
             return
-    
     if not found:
-        await update.message.reply_text(f"User @{target_username} hasn't posted any raids today yet. They need to post at least one X link first, then you can add more.")
+        new_user_id = hash(target_username)
+        raid_data[today][new_user_id]["username"] = target_username
+        raid_data[today][new_user_id]["count"] = 1
+        await update.message.reply_text(f"Added 1 raid for @{target_username}. Total: 1 (new user)")
 
 async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
