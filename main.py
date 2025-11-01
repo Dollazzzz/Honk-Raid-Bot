@@ -262,10 +262,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
+    from telegram.ext import JobQueue
+    
     keep_alive()
     load_raid_data()
     
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Create job queue and pass it to builder
+    job_queue = JobQueue()
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .job_queue(job_queue)
+        .build()
+    )
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
@@ -280,7 +289,6 @@ def main():
     logger.info("Raid Tracking Bot starting...")
     logger.info(f"Monitoring group: {TARGET_GROUP_ID}")
     
-    # Run with job queue enabled
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
