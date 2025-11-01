@@ -206,11 +206,18 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
         return
-    current_jobs = context.job_queue.get_jobs_by_name("daily_raid_report")
+    
+    job_queue = context.application.job_queue
+    if job_queue is None:
+        await update.message.reply_text("Job queue not available. Please restart the bot.")
+        return
+    
+    current_jobs = job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
+    
     est_time = time(hour=20, minute=0, tzinfo=EST)
-    context.job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report")
+    job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report")
     await update.message.reply_text("Daily report scheduled for 8PM EST! The leaderboard will be posted automatically every day.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
