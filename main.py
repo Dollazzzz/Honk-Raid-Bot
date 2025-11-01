@@ -3,8 +3,8 @@ from threading import Thread
 import os
 import logging
 import re
-import json 
-from datetime import datetime, time, timedelta 
+import json
+from datetime import datetime, time, timedelta
 import pytz
 from collections import defaultdict
 from telegram import Update
@@ -33,6 +33,7 @@ UTC = pytz.timezone("UTC")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_GROUP_ID = int(os.environ.get("GROUP_ID", "-1002374333782"))
+
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.message.from_user
     chat = update.message.chat
@@ -63,7 +64,6 @@ def save_raid_data():
         logger.info("Raid data saved successfully")
     except Exception as e:
         logger.error(f"Error saving raid data: {e}")
-
 def load_raid_data():
     try:
         if os.path.exists("raid_data.json"):
@@ -92,7 +92,6 @@ def extract_x_link(text):
         if match:
             return match.group(0)
     return None
-
 async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -108,7 +107,7 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raid_data[today][user.id]["username"] = username
         raid_data[today][user.id]["count"] += 1
         logger.info(f"Raid tracked for @{username}. Total today: {raid_data[today][user.id]['count']}")
-        save_raid_data() 
+        save_raid_data()
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -118,15 +117,12 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
     save_raid_data() 
-
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
-        save_raid_data()
         return
     if not context.args:
         await update.message.reply_text("Usage: /addraid @username")
-        save_raid_data() 
         return
     target_username = context.args[0].replace("@", "")
     today = get_today_date()
@@ -136,12 +132,14 @@ async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data["count"] += 1
             found = True
             await update.message.reply_text(f"Added 1 raid for @{target_username}. New total: {data['count']}")
+            save_raid_data()
             return
     if not found:
         new_user_id = hash(target_username)
         raid_data[today][new_user_id]["username"] = target_username
         raid_data[today][new_user_id]["count"] = 1
         await update.message.reply_text(f"Added 1 raid for @{target_username}. Total: 1 (new user)")
+        save_raid_data()
 
 async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -159,18 +157,15 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data["count"] -= 1
                 found = True
                 await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
-                save_raid_data() 
+                save_raid_data()
                 break
     if not found:
         await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
-    
-  
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = get_today_date()
     message_text = generate_leaderboard_message(today)
     await update.message.reply_text(message_text)
-
 def generate_leaderboard_message(date):
     if date not in raid_data or not raid_data[date]:
         return "No raids tracked today yet!"
@@ -196,37 +191,39 @@ def generate_leaderboard_message(date):
         message += f"{display_name} {count} {raids_text} {medal}\n\n"
     message += f"Total Raids: {total_raids}"
     return message
+
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     today = get_today_date()
     message_text = generate_leaderboard_message(today)
+    
     try:
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
         logger.info(f"Daily report sent for {today}")
     except Exception as e:
         logger.error(f"Error sending daily report: {e}")
-
+        
 async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
-        await update.message.reply_text("⛔ Only admins can use this command!")
+        await update.message.reply_text("Only admins can use this command!")
         return
-    
     current_jobs = context.job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
     est_time = time(hour=20, minute=0, tzinfo=EST)
     context.job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report")
-    await update.message.reply_text("Daily report scheduled for 8PM EST!\nTracking X links posted by users.")
+    await update.message.reply_text("Daily report scheduled for 8PM EST! The leaderboard will be posted automatically every day.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
-        await update.message.reply_text("⛔ Only admins can use this command!")
+        await update.message.reply_text("Only admins can use this command!")
         return
-    
     today = get_today_date()
     count = len(raid_data[today]) if today in raid_data else 0
     if today in raid_data:
         raid_data[today].clear()
+    save_raid_data()
     await update.message.reply_text(f"Today data reset! {count} users cleared")
+
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     today = get_today_date()
@@ -250,6 +247,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/setupreport - Daily 8PM reports (admin)\n"
         "/resettoday - Reset data (admin)"
     )
+
 def main():
     keep_alive()
     load_raid_data()
