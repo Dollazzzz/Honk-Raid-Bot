@@ -42,17 +42,23 @@ def get_ordinal_suffix(day):
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return f"{day}{suffix}"
-
 def extract_x_link(text):
     if not text:
         return None
-    patterns = [r"https?://(?:www\.)?x\.com/\S+/status/\d+", r"https?://(?:www\.)?twitter\.com/\S+/status/\d+"]
+    patterns = [
+        r'https?://(?:www\.)?x\.com/\S+?/status/(\d+)',
+        r'https?://(?:www\.)?twitter\.com/\S+?/status/(\d+)'
+    ]
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
-            status_id = match.group(1)
-            return status_id 
-        return None
+            try:
+                status_id = match.group(1)
+                return status_id
+            except IndexError:
+                continue
+    return None
+        
 
 def clean_old_pending_raids():
     now = datetime.now(EST)
