@@ -14,6 +14,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
+    logger.info("Health check ping received")
     return "Bot is running!"
 
 def run():
@@ -193,14 +194,23 @@ def generate_leaderboard_message(date):
     return message
 
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
-    today = get_today_date()
-    message_text = generate_leaderboard_message(today)
-    
+    logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
+        logger.info("Getting today's date...")
+        today = get_today_date()
+        logger.info(f"Today's date: {today}")
+        
+        logger.info("Generating leaderboard message...")
+        message_text = generate_leaderboard_message(today)
+        logger.info(f"Message generated, length: {len(message_text)}")
+        
+        logger.info(f"Sending message to chat {TARGET_GROUP_ID}...")
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
-        logger.info(f"Daily report sent for {today}")
+        logger.info("Message sent successfully!")
+        
+        logger.info(f"Daily report completed for {today}")
     except Exception as e:
-        logger.error(f"Error sending daily report: {e}")
+        logger.error(f"ERROR in send_daily_report: {e}", exc_info=True)
         
 async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -290,8 +300,14 @@ def main():
     
     logger.info("Raid Tracking Bot starting...")
     logger.info(f"Monitoring group: {TARGET_GROUP_ID}")
+    logger.info("=== Starting application polling ===")
+    logger.info(f"Job queue exists: {application.job_queue is not None}")
     
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"CRITICAL ERROR in run_polling: {e}", exc_info=True)
+        raise   
 
 if __name__ == "__main__":
     main()
