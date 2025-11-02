@@ -78,8 +78,10 @@ def save_raid_data():
         data_to_save = {}
         for date, users in raid_data.items():
             date_str = date.isoformat()
-            logger.info(f"Saving date: {date_str} with {len(users)} users")
+            # Convert user IDs to strings for JSON
+            users_dict = {str(user_id): user_data for user_id, user_data in users.items()}
             data_to_save[date_str] = dict(users)
+            logger.info(f"Saving date: {date_str} with {len(users)} users")
         logger.info(f"Total data structure: {data_to_save}")
         with open("raid_data.json", "w") as f:
             json.dump(data_to_save, f, indent=2)
