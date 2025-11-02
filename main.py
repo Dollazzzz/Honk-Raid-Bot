@@ -34,7 +34,6 @@ UTC = pytz.timezone("UTC")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_GROUP_ID = int(os.environ.get("GROUP_ID", "-1002374333782"))
-
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.message.from_user
     chat = update.message.chat
@@ -45,19 +44,11 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         return False
 
 def get_today_date():
-    """
-    Get the current 'raid day'. 
-    Raid day starts at 8:30 PM EST and ends at 8:30 PM the next day.
-    So after 8:30 PM, we consider it the NEXT day's raid period.
-    """
     now_est = datetime.now(EST)
-    
-    # If it's after 8:30 PM, count it as tomorrow's raids
     if now_est.hour >= 20 and now_est.minute >= 30:
         raid_day = (now_est + timedelta(days=1)).date()
     else:
         raid_day = now_est.date()
-    
     logger.info(f"Current EST time: {now_est}, Raid day: {raid_day}")
     return raid_day
 
@@ -68,6 +59,18 @@ def get_ordinal_suffix(day):
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return f"{day}{suffix}"
 
+def cleanup_old_dates():
+    today = get_today_date()
+    dates_to_remove = []
+    logger.info(f"=== CLEANUP: Today is {today} ===")
+    for date in list(raid_data.keys()):
+        logger.info(f"Checking date {date}: older than today? {date < today}")
+        if date < today:
+            dates_to_remove.append(date)
+    for date in dates_to_remove:
+        logger.info(f"Removing old date: {date}")
+        del raid_data[date]
+    logger.info(f"Cleanup done. Remaining dates: {list(raid_data.keys())}")
 def save_raid_data():
     try:
         logger.info("=== SAVING RAID DATA ===")
@@ -77,17 +80,12 @@ def save_raid_data():
             date_str = date.isoformat()
             logger.info(f"Saving date: {date_str} with {len(users)} users")
             data_to_save[date_str] = dict(users)
-        
-        logger.info(f"Total dates to save: {len(data_to_save)}")
         logger.info(f"Total data structure: {data_to_save}")
-        
         with open("raid_data.json", "w") as f:
             json.dump(data_to_save, f, indent=2)
-        
-        logger.info("Raid data saved successfully to raid_data.json")
+        logger.info("Raid data saved successfully")
     except Exception as e:
-        logger.error(f"Error saving raid data: {e}", exc_info=True)
-
+        logger.error(f"Error saving: {e}", exc_info=True)
 
 def load_raid_data():
     try:
@@ -95,46 +93,22 @@ def load_raid_data():
         if os.path.exists("raid_data.json"):
             with open("raid_data.json", "r") as f:
                 data = json.load(f)
-            
-            logger.info(f"Loaded data from file: {data}")
-            logger.info(f"Number of dates in file: {len(data)}")
-            
+            logger.info(f"Loaded {len(data)} dates from file")
             for date_str, users in data.items():
                 date = datetime.fromisoformat(date_str).date()
-                logger.info(f"Loading date: {date} with {len(users)} users")
                 for user_id_str, user_data in users.items():
                     user_id = int(user_id_str)
                     raid_data[date][user_id] = user_data
-                    logger.info(f"  Loaded user: {user_data['username']} with {user_data['count']} raids")
-            logger.info("Raid data loaded successfully")
-            cleanup_old_dates()  
+            logger.info("Load complete")
+            cleanup_old_dates()
         else:
-            logger.info("Raid data loaded successfully")
-       
+            logger.info("No saved data found")
     except Exception as e:
-            logger.error(f"Error loading raid data: {e}", exc_info=True)
-
-def cleanup_old_dates():
-    """Remove dates older than today from raid_data"""
-    today = get_today_date()
-    dates_to_remove = []
-    
-    for date in list(raid_data.keys()):
-        if date < today:
-            dates_to_remove.append(date)
-            logger.info(f"Marking old date for removal: {date}")
-    
-    for date in dates_to_remove:
-        del raid_data[date]
-        logger.info(f"Removed old date: {date}")
-
+        logger.error(f"Error loading: {e}", exc_info=True)
 def extract_x_link(text):
     if not text:
         return None
-    patterns = [
-        r'https?://(?:www\.)?x\.com/\S+/status/\d+',
-        r'https?://(?:www\.)?twitter\.com/\S+/status/\d+'
-    ]
+    patterns = [r'https?://(?:www\.)?x\.com/\S+/status/\d+', r'https?://(?:www\.)?twitter\.com/\S+/status/\d+']
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
@@ -155,7 +129,7 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = get_today_date()
         raid_data[today][user.id]["username"] = username
         raid_data[today][user.id]["count"] += 1
-        logger.info(f"Raid tracked for @{username}. Total today: {raid_data[today][user.id]['count']}")
+        logger.info(f"Raid tracked for @{username}. Total: {raid_data[today][user.id]['count']}")
         save_raid_data()
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,8 +139,7 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["username"] = username
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
-    save_raid_data() 
-
+    save_raid_data()
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
@@ -188,7 +161,7 @@ async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_user_id = hash(target_username)
         raid_data[today][new_user_id]["username"] = target_username
         raid_data[today][new_user_id]["count"] = 1
-        await update.message.reply_text(f"Added 1 raid for @{target_username}. Total: 1 (new user)")
+        await update.message.reply_text(f"Added 1 raid for @{target_username}. Total: 1")
         save_raid_data()
 
 async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -206,9 +179,9 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data["count"] > 0:
                 data["count"] -= 1
                 found = True
-                await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
-                save_raid_data()
-                break
+        await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
+        save_raid_data()
+        break
     if not found:
         await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
 
@@ -216,6 +189,7 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     today = get_today_date()
     message_text = generate_leaderboard_message(today)
     await update.message.reply_text(message_text)
+
 def generate_leaderboard_message(date):
     if date not in raid_data or not raid_data[date]:
         return "No raids tracked today yet!"
@@ -245,45 +219,24 @@ def generate_leaderboard_message(date):
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
-        logger.info("Getting today's date...")
         today = get_today_date()
-        logger.info(f"Today's date: {today}")
-        
-        logger.info("Generating leaderboard message...")
         message_text = generate_leaderboard_message(today)
-        logger.info(f"Message generated, length: {len(message_text)}")
-        
-        logger.info(f"Sending message to chat {TARGET_GROUP_ID}...")
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
-        logger.info("Message sent successfully!")
-        
-        logger.info(f"Daily report completed for {today}")
+        logger.info("Daily report sent successfully")
     except Exception as e:
-        logger.error(f"ERROR in send_daily_report: {e}", exc_info=True)
-        
+        logger.error(f"ERROR in daily report: {e}", exc_info=True)
+
 async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
         return
-    
-    # Get job queue from application
     job_queue = context.application.job_queue
-    
-    # Remove existing jobs
     current_jobs = job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
-    
-    # Schedule new job
     est_time = time(hour=20, minute=30, tzinfo=EST)
-    job_queue.run_daily(
-        send_daily_report,
-        time=est_time,
-        name="daily_raid_report",
-        chat_id=TARGET_GROUP_ID
-    )
-    
-    await update.message.reply_text("✅ Daily report scheduled for 8:30 PM EST! The leaderboard will be posted automatically every day.")
+    job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
+    await update.message.reply_text("Daily report scheduled for 8:30 PM EST!")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -294,7 +247,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if today in raid_data:
         raid_data[today].clear()
     save_raid_data()
-    await update.message.reply_text(f"Today data reset! {count} users cleared")
+    await update.message.reply_text(f"Reset complete! {count} users cleared")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -303,43 +256,28 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         count = raid_data[today][user.id]["count"]
         username = raid_data[today][user.id]["username"]
         raids_text = "Raid" if count == 1 else "Raids"
-        await update.message.reply_text(f"Your Stats Today\n\n@{username}\n{count} {raids_text} completed")
+        await update.message.reply_text(f"Your Stats\n\n@{username}\n{count} {raids_text}")
     else:
         await update.message.reply_text("You have not completed any raids today yet!")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Raid Tracking Bot Active!\n\n"
-        "Commands:\n"
-        "/trackraid - Log a raid for yourself\n"
-        "/addraid @user - Add a raid for someone (admin)\n"
-        "/removeraid @user - Remove a raid from someone (admin)\n"
+        "/trackraid - Log a raid\n"
+        "/addraid @user - Add raid (admin)\n"
+        "/removeraid @user - Remove raid (admin)\n"
         "/stats - View leaderboard\n"
         "/mystats - Your stats\n"
-        "/setupreport - Daily 8PM reports (admin)\n"
+        "/setupreport - Daily 8:30PM reports (admin)\n"
         "/resettoday - Reset data (admin)"
     )
 
-
-
-
 def main():
     from telegram.ext import JobQueue
-    
     keep_alive()
     load_raid_data()
-    
-    # Create job queue
     job_queue = JobQueue()
-    
-    # Build application with job queue
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .job_queue(job_queue)
-        .build()
-    )
-    
+    application = Application.builder().token(BOT_TOKEN).job_queue(job_queue).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
     application.add_handler(CommandHandler("addraid", add_raid_for_user))
@@ -349,18 +287,9 @@ def main():
     application.add_handler(CommandHandler("setupreport", setup_daily_report))
     application.add_handler(CommandHandler("resettoday", reset_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_x_link))
-    
-    logger.info("Raid Tracking Bot starting...")
-    logger.info(f"Monitoring group: {TARGET_GROUP_ID}")
-    logger.info("=== Starting application polling ===")
-    logger.info(f"Job queue exists: {application.job_queue is not None}")
-    
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        logger.error(f"CRITICAL ERROR in run_polling: {e}", exc_info=True)
-        raise   
+    logger.info("Bot starting...")
+    logger.info(f"Monitoring: {TARGET_GROUP_ID}")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
-    
