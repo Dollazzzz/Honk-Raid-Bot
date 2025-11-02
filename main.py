@@ -45,7 +45,21 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         return False
 
 def get_today_date():
-    return datetime.now(EST).date()
+    """
+    Get the current 'raid day'. 
+    Raid day starts at 8:30 PM EST and ends at 8:30 PM the next day.
+    So after 8:30 PM, we consider it the NEXT day's raid period.
+    """
+    now_est = datetime.now(EST)
+    
+    # If it's after 8:30 PM, count it as tomorrow's raids
+    if now_est.hour >= 20 and now_est.minute >= 30:
+        raid_day = (now_est + timedelta(days=1)).date()
+    else:
+        raid_day = now_est.date()
+    
+    logger.info(f"Current EST time: {now_est}, Raid day: {raid_day}")
+    return raid_day
 
 def get_ordinal_suffix(day):
     if 10 <= day % 100 <= 20:
@@ -56,30 +70,47 @@ def get_ordinal_suffix(day):
 
 def save_raid_data():
     try:
+        logger.info("=== SAVING RAID DATA ===")
         data_to_save = {}
         for date, users in raid_data.items():
             date_str = date.isoformat()
+            logger.info(f"Saving date: {date_str} with {len(users)} users")
             data_to_save[date_str] = dict(users)
+        
+        logger.info(f"Total dates to save: {len(data_to_save)}")
+        logger.info(f"Total data structure: {data_to_save}")
+        
         with open("raid_data.json", "w") as f:
-            json.dump(data_to_save, f)
-        logger.info("Raid data saved successfully")
+            json.dump(data_to_save, f, indent=2)
+        
+        logger.info("Raid data saved successfully to raid_data.json")
     except Exception as e:
-        logger.error(f"Error saving raid data: {e}")
+        logger.error(f"Error saving raid data: {e}", exc_info=True)
+
+
 def load_raid_data():
     try:
+        logger.info("=== LOADING RAID DATA ===")
         if os.path.exists("raid_data.json"):
             with open("raid_data.json", "r") as f:
                 data = json.load(f)
+            
+            logger.info(f"Loaded data from file: {data}")
+            logger.info(f"Number of dates in file: {len(data)}")
+            
             for date_str, users in data.items():
                 date = datetime.fromisoformat(date_str).date()
+                logger.info(f"Loading date: {date} with {len(users)} users")
                 for user_id_str, user_data in users.items():
                     user_id = int(user_id_str)
                     raid_data[date][user_id] = user_data
+                    logger.info(f"  Loaded user: {user_data['username']} with {user_data['count']} raids")
+            
             logger.info("Raid data loaded successfully")
         else:
-            logger.info("No existing raid data found")
+            logger.info("No existing raid_data.json file found")
     except Exception as e:
-        logger.error(f"Error loading raid data: {e}")
+        logger.error(f"Error loading raid data: {e}", exc_info=True)
 
 def extract_x_link(text):
     if not text:
@@ -93,6 +124,7 @@ def extract_x_link(text):
         if match:
             return match.group(0)
     return None
+
 async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -118,6 +150,7 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
     save_raid_data() 
+
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
