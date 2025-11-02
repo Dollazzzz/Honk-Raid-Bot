@@ -267,7 +267,7 @@ def main():
     keep_alive()
     load_raid_data()
     
-    # Create and explicitly initialize job queue
+    # Create job queue
     job_queue = JobQueue()
     
     # Build application with job queue
@@ -277,10 +277,6 @@ def main():
         .job_queue(job_queue)
         .build()
     )
-    
-    # DEBUG: Check if job queue exists
-    logger.info(f"Job queue after build: {application.job_queue}")
-    logger.info(f"Job queue is None: {application.job_queue is None}")
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
