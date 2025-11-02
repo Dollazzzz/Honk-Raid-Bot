@@ -71,6 +71,7 @@ def get_ordinal_suffix(day):
 def save_raid_data():
     try:
         logger.info("=== SAVING RAID DATA ===")
+        cleanup_old_dates()
         data_to_save = {}
         for date, users in raid_data.items():
             date_str = date.isoformat()
@@ -105,12 +106,28 @@ def load_raid_data():
                     user_id = int(user_id_str)
                     raid_data[date][user_id] = user_data
                     logger.info(f"  Loaded user: {user_data['username']} with {user_data['count']} raids")
-            
+             logger.info("Raid data loaded successfully")
+            cleanup_old_dates()  # Add this line
+        else:
             logger.info("Raid data loaded successfully")
         else:
             logger.info("No existing raid_data.json file found")
     except Exception as e:
         logger.error(f"Error loading raid data: {e}", exc_info=True)
+
+def cleanup_old_dates():
+    """Remove dates older than today from raid_data"""
+    today = get_today_date()
+    dates_to_remove = []
+    
+    for date in list(raid_data.keys()):
+        if date < today:
+            dates_to_remove.append(date)
+            logger.info(f"Marking old date for removal: {date}")
+    
+    for date in dates_to_remove:
+        del raid_data[date]
+        logger.info(f"Removed old date: {date}")
 
 def extract_x_link(text):
     if not text:
@@ -303,6 +320,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/setupreport - Daily 8PM reports (admin)\n"
         "/resettoday - Reset data (admin)"
     )
+
+
+
 
 def main():
     from telegram.ext import JobQueue
