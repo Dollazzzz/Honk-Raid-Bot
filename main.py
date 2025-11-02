@@ -106,14 +106,13 @@ def load_raid_data():
                     user_id = int(user_id_str)
                     raid_data[date][user_id] = user_data
                     logger.info(f"  Loaded user: {user_data['username']} with {user_data['count']} raids")
-             logger.info("Raid data loaded successfully")
-            cleanup_old_dates()  # Add this line
+            logger.info("Raid data loaded successfully")
+            cleanup_old_dates()  
         else:
             logger.info("Raid data loaded successfully")
-        else:
-            logger.info("No existing raid_data.json file found")
+       
     except Exception as e:
-        logger.error(f"Error loading raid data: {e}", exc_info=True)
+            logger.error(f"Error loading raid data: {e}", exc_info=True)
 
 def cleanup_old_dates():
     """Remove dates older than today from raid_data"""
