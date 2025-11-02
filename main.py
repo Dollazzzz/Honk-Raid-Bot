@@ -216,7 +216,7 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
         job.schedule_removal()
     
     # Schedule new job
-    est_time = time(hour=20, minute=0, tzinfo=EST)
+    est_time = time(hour=20, minute=30, tzinfo=EST)
     job_queue.run_daily(
         send_daily_report,
         time=est_time,
@@ -224,7 +224,7 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_id=TARGET_GROUP_ID
     )
     
-    await update.message.reply_text("✅ Daily report scheduled for 8:00 PM EST! The leaderboard will be posted automatically every day.")
+    await update.message.reply_text("✅ Daily report scheduled for 8:30 PM EST! The leaderboard will be posted automatically every day.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
