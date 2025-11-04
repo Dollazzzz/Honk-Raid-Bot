@@ -34,6 +34,7 @@ UTC = pytz.timezone("UTC")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_GROUP_ID = int(os.environ.get("GROUP_ID", "-1002374333782"))
+
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.message.from_user
     chat = update.message.chat
@@ -181,10 +182,10 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data["count"] > 0:
                 data["count"] -= 1
                 found = True
-        await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
-        save_raid_data()
-        break
-    if not found:
+                await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
+                save_raid_data()
+                break
+if not found:
         await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,7 +218,6 @@ def generate_leaderboard_message(date):
         message += f"{display_name} {count} {raids_text} {medal}\n\n"
     message += f"Total Raids: {total_raids}"
     return message
-
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
@@ -238,6 +238,7 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
         job.schedule_removal()
     est_time = time(hour=20, minute=30, tzinfo=EST)
     job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
+    logger.info(f"Daily report scheduled for 8:30 PM EST (next run will be visible in logs)")
     await update.message.reply_text("Daily report scheduled for 8:30 PM EST!")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -249,7 +250,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if today in raid_data:
         raid_data[today].clear()
     save_raid_data()
-    await update.message.reply_text(f"Reset complete! {count} users cleared")
+    await update.message.reply_text(f"Reset comple
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -262,6 +263,13 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("You have not completed any raids today yet!")
 
+async def test_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("Only admins can use this command!")
+        return
+    await send_daily_report(context)
+    await update.message.reply_text("Test report sent!")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Raid Tracking Bot Active!\n\n"
@@ -271,15 +279,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stats - View leaderboard\n"
         "/mystats - Your stats\n"
         "/setupreport - Daily 8:30PM reports (admin)\n"
-        "/resettoday - Reset data (admin)"
+        "/resettoday - Reset data (admin)\n"
+        "/testreport - Test daily report (admin)"
     )
-
 def main():
-    from telegram.ext import JobQueue
     keep_alive()
     load_raid_data()
-    job_queue = JobQueue()
-    application = Application.builder().token(BOT_TOKEN).job_queue(job_queue).build()
+    
+    # Build application (JobQueue is now automatic)
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
     application.add_handler(CommandHandler("addraid", add_raid_for_user))
@@ -288,7 +298,11 @@ def main():
     application.add_handler(CommandHandler("mystats", stats_command))
     application.add_handler(CommandHandler("setupreport", setup_daily_report))
     application.add_handler(CommandHandler("resettoday", reset_command))
+    application.add_handler(CommandHandler("testreport", test_report))
+    
+    # Add message handler for tracking X links
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_x_link))
+    
     logger.info("Bot starting...")
     logger.info(f"Monitoring: {TARGET_GROUP_ID}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
