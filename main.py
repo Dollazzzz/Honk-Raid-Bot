@@ -182,10 +182,10 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data["count"] > 0:
                 data["count"] -= 1
                 found = True
-                await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
+                await update.message.reply_text(f"Removed 1 raid from             @{target_username}. New total: {data['count']}")
                 save_raid_data()
                 break
-if not found:
+    if not found:
         await update.message.reply_text(f"User @{target_username} not found or has 0 raids today")
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -250,7 +250,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if today in raid_data:
         raid_data[today].clear()
     save_raid_data()
-    await update.message.reply_text(f"Reset comple
+    await update.message.reply_text(f"Reset complete! {count} users cleared")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
