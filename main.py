@@ -49,7 +49,7 @@ def get_today_date():
     # 8:30 PM EST = 1:30 AM UTC (next day)
     # If it's past 1:30 AM UTC, we're tracking for the current UTC day
     # If it's before 1:30 AM UTC, we're still on previous day's raids
-    if now_utc.hour >= 4 and now_utc.minute >= 50:
+    if now_utc.hour >= 1 and now_utc.minute >= 30:
         raid_day = now_utc.date()
     else:
         raid_day = (now_utc - timedelta(days=1)).date()
@@ -250,12 +250,10 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for job in current_jobs:
         job.schedule_removal()
     
-    # 8:30 PM EST = 1:30 AM UTC (next day during standard time)
-    # Note: This doesn't auto-adjust for daylight saving
-    utc_time = time(hour=4, minute=50, tzinfo=UTC)
-    job_queue.run_daily(send_daily_report, time=utc_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
-    logger.info(f"Daily report scheduled for 1:30 AM UTC (8:30 PM EST)")
-    await update.message.reply_text("Daily report scheduled for 8:30 PM EST (1:30 AM UTC)!")
+    # FOR TESTING: Run every 2 minutes, first run in 30 seconds
+    job_queue.run_repeating(send_daily_report, interval=120, first=10, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
+    logger.info(f"TEST MODE: Daily report will fire in 10 seconds, then every 2 minutes")
+    await update.message.reply_text("TEST MODE: Report will fire in 10 seconds, then every 2 minutes!")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
