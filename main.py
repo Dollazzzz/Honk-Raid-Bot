@@ -122,22 +122,14 @@ def extract_x_link(text):
     return None
 
 async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("=== MESSAGE RECEIVED ===")
     if not update.message:
-        logger.info("No message in update")
         return
     message = update.message
     user = message.from_user
     text = message.text or ""
-    logger.info(f"Message from {user.username or user.first_name}: {text[:50]}")
-    
     if user.is_bot:
-        logger.info("Message from bot, skipping")
         return
-    
     x_link = extract_x_link(text)
-    logger.info(f"X link extracted: {x_link}")
-    
     if x_link:
         username = user.username or user.first_name or f"User{user.id}"
         today = get_today_date()
@@ -145,8 +137,6 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raid_data[today][user.id]["count"] += 1
         logger.info(f"Raid tracked for @{username}. Total: {raid_data[today][user.id]['count']}")
         save_raid_data()
-    else:
-        logger.info("No X link found in message")
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -252,10 +242,11 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for job in current_jobs:
         job.schedule_removal()
     
-    # FOR TESTING: Run every 2 minutes, first run in 30 seconds
-    job_queue.run_repeating(send_daily_report, interval=120, first=10, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
-    logger.info(f"TEST MODE: Daily report will fire in 10 seconds, then every 2 minutes")
-    await update.message.reply_text("TEST MODE: Report will fire in 10 seconds, then every 2 minutes!")
+    # 8:30 PM EST = 1:30 AM UTC (next day)
+    utc_time = time(hour=1, minute=30, tzinfo=UTC)
+    job_queue.run_daily(send_daily_report, time=utc_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
+    logger.info(f"Daily report scheduled for 1:30 AM UTC (8:30 PM EST)")
+    await update.message.reply_text("Daily report scheduled for 8:30 PM EST (1:30 AM UTC)!")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
