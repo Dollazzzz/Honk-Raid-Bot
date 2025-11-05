@@ -45,12 +45,15 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         return False
 
 def get_today_date():
-    now_est = datetime.now(EST)
-    if now_est.hour >= 20 and now_est.minute >= 30:
-        raid_day = (now_est + timedelta(days=1)).date()
+    now_utc = datetime.now(UTC)
+    # 8:30 PM EST = 1:30 AM UTC (next day)
+    # If it's past 1:30 AM UTC, we're tracking for the current UTC day
+    # If it's before 1:30 AM UTC, we're still on previous day's raids
+    if now_utc.hour >= 1 and now_utc.minute >= 30:
+        raid_day = now_utc.date()
     else:
-        raid_day = now_est.date()
-    logger.info(f"Current EST time: {now_est}, Raid day: {raid_day}")
+        raid_day = (now_utc - timedelta(days=1)).date()
+    logger.info(f"Current UTC time: {now_utc}, Raid day: {raid_day}")
     return raid_day
 
 def get_ordinal_suffix(day):
@@ -119,14 +122,22 @@ def extract_x_link(text):
     return None
 
 async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("=== MESSAGE RECEIVED ===")
     if not update.message:
+        logger.info("No message in update")
         return
     message = update.message
     user = message.from_user
     text = message.text or ""
+    logger.info(f"Message from {user.username or user.first_name}: {text[:50]}")
+    
     if user.is_bot:
+        logger.info("Message from bot, skipping")
         return
+    
     x_link = extract_x_link(text)
+    logger.info(f"X link extracted: {x_link}")
+    
     if x_link:
         username = user.username or user.first_name or f"User{user.id}"
         today = get_today_date()
@@ -134,6 +145,8 @@ async def track_x_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         raid_data[today][user.id]["count"] += 1
         logger.info(f"Raid tracked for @{username}. Total: {raid_data[today][user.id]['count']}")
         save_raid_data()
+    else:
+        logger.info("No X link found in message")
 
 async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -197,8 +210,8 @@ def generate_leaderboard_message(date):
     if date not in raid_data or not raid_data[date]:
         return "No raids tracked today yet!"
     sorted_users = sorted(raid_data[date].items(), key=lambda x: x[1]["count"], reverse=True)
-    now_est = datetime.now(EST)
     now_utc = datetime.now(UTC)
+    now_est = now_utc.astimezone(EST)
     month_name = now_est.strftime("%b")
     day_with_suffix = get_ordinal_suffix(now_est.day)
     time_str = now_utc.strftime("%I:%M%p")
@@ -236,10 +249,13 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     current_jobs = job_queue.get_jobs_by_name("daily_raid_report")
     for job in current_jobs:
         job.schedule_removal()
-    est_time = time(hour=20, minute=30, tzinfo=EST)
-    job_queue.run_daily(send_daily_report, time=est_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
-    logger.info(f"Daily report scheduled for 8:30 PM EST (next run will be visible in logs)")
-    await update.message.reply_text("Daily report scheduled for 8:30 PM EST!")
+    
+    # 8:30 PM EST = 1:30 AM UTC (next day during standard time)
+    # Note: This doesn't auto-adjust for daylight saving
+    utc_time = time(hour=1, minute=30, tzinfo=UTC)
+    job_queue.run_daily(send_daily_report, time=utc_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
+    logger.info(f"Daily report scheduled for 1:30 AM UTC (8:30 PM EST)")
+    await update.message.reply_text("Daily report scheduled for 8:30 PM EST (1:30 AM UTC)!")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
