@@ -49,7 +49,7 @@ def get_today_date():
     # 8:30 PM EST = 1:30 AM UTC (next day)
     # If it's past 1:30 AM UTC, we're tracking for the current UTC day
     # If it's before 1:30 AM UTC, we're still on previous day's raids
-    if now_utc.hour >= 1 and now_utc.minute >= 30:
+    if now_utc.hour >= 4 and now_utc.minute >= 50:
         raid_day = now_utc.date()
     else:
         raid_day = (now_utc - timedelta(days=1)).date()
@@ -252,7 +252,7 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # 8:30 PM EST = 1:30 AM UTC (next day during standard time)
     # Note: This doesn't auto-adjust for daylight saving
-    utc_time = time(hour=1, minute=30, tzinfo=UTC)
+    utc_time = time(hour=4, minute=50, tzinfo=UTC)
     job_queue.run_daily(send_daily_report, time=utc_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
     logger.info(f"Daily report scheduled for 1:30 AM UTC (8:30 PM EST)")
     await update.message.reply_text("Daily report scheduled for 8:30 PM EST (1:30 AM UTC)!")
