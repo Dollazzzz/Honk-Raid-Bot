@@ -234,10 +234,13 @@ def generate_leaderboard_message(date):
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
-        today = get_today_date()
-        message_text = generate_leaderboard_message(today)
+        # Report on yesterday's raids (the day that just ended)
+        now_utc = datetime.now(UTC)
+        report_date = (now_utc - timedelta(days=1)).date()
+        
+        message_text = generate_leaderboard_message(report_date)
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
-        logger.info("Daily report sent successfully")
+        logger.info(f"Daily report sent for date: {report_date}")
     except Exception as e:
         logger.error(f"ERROR in daily report: {e}", exc_info=True)
 
