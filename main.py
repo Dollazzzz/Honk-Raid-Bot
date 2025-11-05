@@ -47,9 +47,9 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 def get_today_date():
     now_utc = datetime.now(UTC)
     # 8:30 PM EST = 1:30 AM UTC (next day)
-    # If it's past 1:30 AM UTC, we're tracking for the current UTC day
-    # If it's before 1:30 AM UTC, we're still on previous day's raids
-    if now_utc.hour >= 1 and now_utc.minute >= 30:
+    # If it's past 1:30 AM UTC, we roll over to the "next" raid day
+    # The raid day runs from 1:30 AM UTC to 1:30 AM UTC next day
+    if now_utc.hour > 1 or (now_utc.hour == 1 and now_utc.minute >= 30):
         raid_day = now_utc.date()
     else:
         raid_day = (now_utc - timedelta(days=1)).date()
