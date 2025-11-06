@@ -221,15 +221,19 @@ def generate_leaderboard_message(date):
         message += f"{display_name} {count} {raids_text} {medal}\n\n"
     message += f"Total Raids: {total_raids}"
     return message
+
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
-        # Use the same date logic as tracking
-        today = get_today_date()
+        # Report on the previous day's raids (the 24-hour period that just ended)
+        now_utc = datetime.now(UTC)
         
-        message_text = generate_leaderboard_message(today)
+        # Go back one day to get the raids that were just tracked
+        report_date = (now_utc - timedelta(days=1)).date()
+        
+        message_text = generate_leaderboard_message(report_date)
         await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
-        logger.info(f"Daily report sent for date: {today}")
+        logger.info(f"Daily report sent for date: {report_date}")
     except Exception as e:
         logger.error(f"ERROR in daily report: {e}", exc_info=True)
 
