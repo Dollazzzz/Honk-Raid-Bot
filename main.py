@@ -34,6 +34,7 @@ UTC = pytz.timezone("UTC")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TARGET_GROUP_ID = int(os.environ.get("GROUP_ID", "-1002374333782"))
+REPORT_TOPIC_ID = int(os.environ.get("REPORT_TOPIC_ID", "54280"))
 
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user = update.message.from_user
@@ -232,8 +233,14 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
         report_date = (now_utc - timedelta(days=1)).date()
         
         message_text = generate_leaderboard_message(report_date)
-        await context.bot.send_message(chat_id=TARGET_GROUP_ID, text=message_text)
-        logger.info(f"Daily report sent for date: {report_date}")
+        
+        # Send to the raid reports topic
+        await context.bot.send_message(
+            chat_id=TARGET_GROUP_ID, 
+            text=message_text,
+            message_thread_id=REPORT_TOPIC_ID  # This posts to the specific topic!
+        )
+        logger.info(f"Daily report sent to topic {REPORT_TOPIC_ID} for date: {report_date}")
     except Exception as e:
         logger.error(f"ERROR in daily report: {e}", exc_info=True)
 
