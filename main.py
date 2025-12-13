@@ -76,6 +76,7 @@ def cleanup_old_dates():
         logger.info(f"Removing old date: {date}")
         del raid_data[date]
     logger.info(f"Cleanup done. Remaining dates: {list(raid_data.keys())}")
+
 def save_raid_data():
     try:
         logger.info("=== SAVING RAID DATA ===")
@@ -83,7 +84,6 @@ def save_raid_data():
         data_to_save = {}
         for date, users in raid_data.items():
             date_str = date.isoformat()
-            # Convert user IDs to strings for JSON
             users_dict = {str(user_id): user_data for user_id, user_data in users.items()}
             data_to_save[date_str] = dict(users)
             logger.info(f"Saving date: {date_str} with {len(users)} users")
@@ -112,6 +112,7 @@ def load_raid_data():
             logger.info("No saved data found")
     except Exception as e:
         logger.error(f"Error loading: {e}", exc_info=True)
+
 def extract_x_link(text):
     if not text:
         return None
@@ -147,6 +148,7 @@ async def manual_track(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raid_data[today][user.id]["count"] += 1
     await update.message.reply_text(f"Raid tracked for @{username}!\nTotal today: {raid_data[today][user.id]['count']}")
     save_raid_data()
+
 async def add_raid_for_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
@@ -186,7 +188,7 @@ async def remove_raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if data["count"] > 0:
                 data["count"] -= 1
                 found = True
-                await update.message.reply_text(f"Removed 1 raid from             @{target_username}. New total: {data['count']}")
+                await update.message.reply_text(f"Removed 1 raid from @{target_username}. New total: {data['count']}")
                 save_raid_data()
                 break
     if not found:
@@ -226,10 +228,7 @@ def generate_leaderboard_message(date):
 async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
     logger.info("=== DAILY REPORT JOB TRIGGERED ===")
     try:
-        # Report on the previous day's raids (the 24-hour period that just ended)
         now_utc = datetime.now(UTC)
-        
-        # Go back one day to get the raids that were just tracked
         report_date = (now_utc - timedelta(days=1)).date()
         
         message_text = generate_leaderboard_message(report_date)
@@ -238,7 +237,7 @@ async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=TARGET_GROUP_ID, 
             text=message_text,
-            message_thread_id=REPORT_TOPIC_ID  # This posts to the specific topic!
+            message_thread_id=REPORT_TOPIC_ID
         )
         logger.info(f"Daily report sent to topic {REPORT_TOPIC_ID} for date: {report_date}")
     except Exception as e:
@@ -253,7 +252,6 @@ async def setup_daily_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for job in current_jobs:
         job.schedule_removal()
     
-    # 8:30 PM EST = 1:30 AM UTC (next day)
     utc_time = time(hour=1, minute=30, tzinfo=UTC)
     job_queue.run_daily(send_daily_report, time=utc_time, name="daily_raid_report", chat_id=TARGET_GROUP_ID)
     logger.info(f"Daily report scheduled for 1:30 AM UTC (8:30 PM EST)")
@@ -288,6 +286,13 @@ async def test_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_daily_report(context)
     await update.message.reply_text("Test report sent!")
 
+async def get_topic_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.message_thread_id:
+        topic_id = update.message.message_thread_id
+        await update.message.reply_text(f"This topic ID is: {topic_id}")
+    else:
+        await update.message.reply_text("This is the general chat (no topic ID)")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Raid Tracking Bot Active!\n\n"
@@ -298,24 +303,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mystats - Your stats\n"
         "/setupreport - Daily 8:30PM reports (admin)\n"
         "/resettoday - Reset data (admin)\n"
-        "/testreport - Test daily report (admin)"
-
-
-async def get_topic_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.message_thread_id:
-        topic_id = update.message.message_thread_id
-        await update.message.reply_text(f"This topic ID is: {topic_id}")
-    else:
-        await update.message.reply_text("This is the general chat (no topic ID)")
+        "/testreport - Test daily report (admin)\n"
+        "/gettopicid - Get current topic ID"
     )
+
 def main():
     keep_alive()
     load_raid_data()
     
-    # Build application (JobQueue is now automatic)
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trackraid", manual_track))
     application.add_handler(CommandHandler("addraid", add_raid_for_user))
@@ -325,14 +322,12 @@ def main():
     application.add_handler(CommandHandler("setupreport", setup_daily_report))
     application.add_handler(CommandHandler("resettoday", reset_command))
     application.add_handler(CommandHandler("testreport", test_report))
-    
-    # Add message handler for tracking X links
+    application.add_handler(CommandHandler("gettopicid", get_topic_id))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_x_link))
     
     logger.info("Bot starting...")
     logger.info(f"Monitoring: {TARGET_GROUP_ID}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-    application.add_handler(CommandHandler("gettopicid", get_topic_id))
 
 if __name__ == "__main__":
     main()
