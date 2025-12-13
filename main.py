@@ -299,6 +299,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/setupreport - Daily 8:30PM reports (admin)\n"
         "/resettoday - Reset data (admin)\n"
         "/testreport - Test daily report (admin)"
+
+
+async def get_topic_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.message_thread_id:
+        topic_id = update.message.message_thread_id
+        await update.message.reply_text(f"This topic ID is: {topic_id}")
+    else:
+        await update.message.reply_text("This is the general chat (no topic ID)")
     )
 def main():
     keep_alive()
@@ -324,6 +332,7 @@ def main():
     logger.info("Bot starting...")
     logger.info(f"Monitoring: {TARGET_GROUP_ID}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.add_handler(CommandHandler("gettopicid", get_topic_id))
 
 if __name__ == "__main__":
     main()
