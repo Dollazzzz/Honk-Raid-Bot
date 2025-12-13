@@ -283,8 +283,16 @@ async def test_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("Only admins can use this command!")
         return
-    await send_daily_report(context)
-    await update.message.reply_text("Test report sent!")
+    
+    # For testing, show TODAY's raids, not yesterday's
+    today = get_today_date()
+    message_text = generate_leaderboard_message(today)
+    await context.bot.send_message(
+        chat_id=TARGET_GROUP_ID,
+        text=message_text,
+        message_thread_id=REPORT_TOPIC_ID
+    )
+    await update.message.reply_text(f"Test report sent for {today}!")
 
 async def get_topic_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.message_thread_id:
